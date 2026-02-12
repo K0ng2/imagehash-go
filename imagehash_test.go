@@ -162,8 +162,8 @@ func TestImageHash_ToString_RoundTrip(t *testing.T) {
 func TestAverageHash_SolidColor(t *testing.T) {
 	// Create a red image
 	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
-	for y := 0; y < 100; y++ {
-		for x := 0; x < 100; x++ {
+	for y := range 100 {
+		for x := range 100 {
 			img.Set(x, y, color.RGBA{255, 0, 0, 255})
 		}
 	}
@@ -181,8 +181,8 @@ func TestAverageHash_SolidColor(t *testing.T) {
 func TestHashingAlgorithms_SmokeTest(t *testing.T) {
 	// Create a simple gradient image
 	img := image.NewRGBA(image.Rect(0, 0, 16, 16))
-	for y := 0; y < 16; y++ {
-		for x := 0; x < 16; x++ {
+	for y := range 16 {
+		for x := range 16 {
 			c := uint8(x * 16)
 			img.Set(x, y, color.RGBA{c, c, c, 255})
 		}

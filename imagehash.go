@@ -56,9 +56,9 @@ func (h *ImageHash) ToString() string {
 	hexLen := (len(h.hash) + 3) / 4
 	result := make([]byte, hexLen)
 
-	for i := 0; i < hexLen; i++ {
+	for i := range hexLen {
 		var val uint8
-		for j := 0; j < 4; j++ {
+		for j := range 4 {
 			bitIdx := i*4 + j
 			if bitIdx < len(h.hash) && h.hash[bitIdx] {
 				val |= 1 << (3 - uint(j))
@@ -98,7 +98,7 @@ func HexToHash(hexStr string) (*ImageHash, error) {
 			return nil, fmt.Errorf("invalid hex character: %c", r)
 		}
 
-		for j := 0; j < 4; j++ {
+		for j := range 4 {
 			if (val & (1 << (3 - uint(j)))) != 0 {
 				hash[i*4+j] = true
 			}
@@ -128,8 +128,8 @@ func AverageHash(img image.Image, hashSize int) *ImageHash {
 
 	// 3. Compute average pixel value
 	var sum uint64
-	for y := 0; y < hashSize; y++ {
-		for x := 0; x < hashSize; x++ {
+	for y := range hashSize {
+		for x := range hashSize {
 			sum += uint64(grayResized.Pix[y*grayResized.Stride+x])
 		}
 	}
@@ -137,8 +137,8 @@ func AverageHash(img image.Image, hashSize int) *ImageHash {
 
 	// 4. Create hash
 	hash := make([]bool, hashSize*hashSize)
-	for y := 0; y < hashSize; y++ {
-		for x := 0; x < hashSize; x++ {
+	for y := range hashSize {
+		for x := range hashSize {
 			hash[y*hashSize+x] = float64(grayResized.Pix[y*grayResized.Stride+x]) > avg
 		}
 	}
@@ -167,8 +167,8 @@ func DifferenceHash(img image.Image, hashSize int) *ImageHash {
 	pixels := grayResized.Pix
 	// grayResized has hashSize+1 columns and hashSize rows
 	hash := make([]bool, hashSize*hashSize)
-	for y := 0; y < hashSize; y++ {
-		for x := 0; x < hashSize; x++ {
+	for y := range hashSize {
+		for x := range hashSize {
 			// p[x, y] vs p[x+1, y]
 			left := pixels[y*grayResized.Stride+x]
 			right := pixels[y*grayResized.Stride+x+1]
@@ -199,8 +199,8 @@ func DifferenceHashVertical(img image.Image, hashSize int) *ImageHash {
 	// 3. Compute differences between rows
 	pixels := grayResized.Pix
 	hash := make([]bool, hashSize*hashSize)
-	for y := 0; y < hashSize; y++ {
-		for x := 0; x < hashSize; x++ {
+	for y := range hashSize {
+		for x := range hashSize {
 			// p[x, y] vs p[x, y+1]
 			top := pixels[y*grayResized.Stride+x]
 			bottom := pixels[(y+1)*grayResized.Stride+x]
@@ -236,9 +236,9 @@ func PerceptualHash(img image.Image, hashSize int, highfreqFactor int) *ImageHas
 	// 3. Compute 2D DCT
 	pixels := grayResized.Pix
 	matrix := make([][]float64, imgSize)
-	for y := 0; y < imgSize; y++ {
+	for y := range imgSize {
 		matrix[y] = make([]float64, imgSize)
-		for x := 0; x < imgSize; x++ {
+		for x := range imgSize {
 			matrix[y][x] = float64(pixels[y*grayResized.Stride+x])
 		}
 	}
@@ -247,8 +247,8 @@ func PerceptualHash(img image.Image, hashSize int, highfreqFactor int) *ImageHas
 
 	// 4. Extract low frequency part (hashSize x hashSize)
 	dctLowFreq := make([]float64, hashSize*hashSize)
-	for y := 0; y < hashSize; y++ {
-		for x := 0; x < hashSize; x++ {
+	for y := range hashSize {
+		for x := range hashSize {
 			dctLowFreq[y*hashSize+x] = dct[y][x]
 		}
 	}
@@ -280,7 +280,7 @@ func median(data []float64) float64 {
 	copy(sorted, data)
 
 	// Simple sort (for small data sets like 8x8 it's okay)
-	for i := 0; i < length; i++ {
+	for i := range length {
 		for j := i + 1; j < length; j++ {
 			if sorted[i] > sorted[j] {
 				sorted[i], sorted[j] = sorted[j], sorted[i]

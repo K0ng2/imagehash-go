@@ -14,23 +14,23 @@ func DCT2D(input [][]float64) [][]float64 {
 
 	// DCT rows
 	rowDCT := make([][]float64, rows)
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		rowDCT[i] = DCT1D(input[i])
 	}
 
 	// DCT columns
 	result := make([][]float64, rows)
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		result[i] = make([]float64, cols)
 	}
 
-	for j := 0; j < cols; j++ {
+	for j := range cols {
 		col := make([]float64, rows)
-		for i := 0; i < rows; i++ {
+		for i := range rows {
 			col[i] = rowDCT[i][j]
 		}
 		colDCT := DCT1D(col)
-		for i := 0; i < rows; i++ {
+		for i := range rows {
 			result[i][j] = colDCT[i]
 		}
 	}
@@ -44,9 +44,9 @@ func DCT1D(input []float64) []float64 {
 	output := make([]float64, n)
 	factor := math.Pi / float64(n)
 
-	for k := 0; k < n; k++ {
+	for k := range n {
 		var sum float64
-		for i := 0; i < n; i++ {
+		for i := range n {
 			sum += input[i] * math.Cos(factor*(float64(i)+0.5)*float64(k))
 		}
 		output[k] = sum
