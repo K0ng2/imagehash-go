@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"sort"
 
 	"github.com/disintegration/imaging"
 )
@@ -238,8 +239,9 @@ func PerceptualHash(img image.Image, hashSize int, highfreqFactor int) *ImageHas
 	matrix := make([][]float64, imgSize)
 	for y := range imgSize {
 		matrix[y] = make([]float64, imgSize)
+		rowStride := y * grayResized.Stride
 		for x := range imgSize {
-			matrix[y][x] = float64(pixels[y*grayResized.Stride+x])
+			matrix[y][x] = float64(pixels[rowStride+x])
 		}
 	}
 
@@ -279,14 +281,7 @@ func median(data []float64) float64 {
 	sorted := make([]float64, length)
 	copy(sorted, data)
 
-	// Simple sort (for small data sets like 8x8 it's okay)
-	for i := range length {
-		for j := i + 1; j < length; j++ {
-			if sorted[i] > sorted[j] {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
+	sort.Float64s(sorted)
 
 	if length%2 == 0 {
 		return (sorted[length/2-1] + sorted[length/2]) / 2
