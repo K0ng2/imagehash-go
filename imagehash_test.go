@@ -217,3 +217,55 @@ func TestHashingAlgorithms_SmokeTest(t *testing.T) {
 		}
 	})
 }
+
+func getBenchImage() image.Image {
+	file, err := os.Open("image.png")
+	if err == nil {
+		defer file.Close()
+		img, _, err := image.Decode(file)
+		if err == nil {
+			return img
+		}
+	}
+	// Fallback to a generated image if image.png is not found
+	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
+	for y := range 512 {
+		for x := range 512 {
+			c := uint8((x + y) % 256)
+			img.Set(x, y, color.RGBA{c, c, c, 255})
+		}
+	}
+	return img
+}
+
+func BenchmarkAverageHash(b *testing.B) {
+	img := getBenchImage()
+
+	for b.Loop() {
+		AverageHash(img, 8)
+	}
+}
+
+func BenchmarkPerceptualHash(b *testing.B) {
+	img := getBenchImage()
+
+	for b.Loop() {
+		PerceptualHash(img, 8, 4)
+	}
+}
+
+func BenchmarkDifferenceHash(b *testing.B) {
+	img := getBenchImage()
+
+	for b.Loop() {
+		DifferenceHash(img, 8)
+	}
+}
+
+func BenchmarkDifferenceHashVertical(b *testing.B) {
+	img := getBenchImage()
+
+	for b.Loop() {
+		DifferenceHashVertical(img, 8)
+	}
+}
