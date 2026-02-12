@@ -5,7 +5,7 @@ import (
 	"image"
 	"math"
 
-	"golang.org/x/image/draw"
+	"github.com/disintegration/imaging"
 )
 
 // ImageHash represents an image hash
@@ -122,21 +122,25 @@ func AverageHash(img image.Image, hashSize int) *ImageHash {
 	gray := ToGrayscale(img)
 
 	// 2. Resize to hashSize x hashSize
-	resized := image.NewGray(image.Rect(0, 0, hashSize, hashSize))
-	draw.CatmullRom.Scale(resized, resized.Bounds(), gray, gray.Bounds(), draw.Over, nil)
+	resized := imaging.Resize(gray, hashSize, hashSize, imaging.Lanczos)
+	// imaging.Resize returns *image.NRGBA, convert to grayscale pixels
+	grayResized := ToGrayscale(resized)
 
 	// 3. Compute average pixel value
 	var sum uint64
-	pixels := resized.Pix
-	for _, p := range pixels {
-		sum += uint64(p)
+	for y := 0; y < hashSize; y++ {
+		for x := 0; x < hashSize; x++ {
+			sum += uint64(grayResized.Pix[y*grayResized.Stride+x])
+		}
 	}
-	avg := float64(sum) / float64(len(pixels))
+	avg := float64(sum) / float64(hashSize*hashSize)
 
 	// 4. Create hash
-	hash := make([]bool, len(pixels))
-	for i, p := range pixels {
-		hash[i] = float64(p) > avg
+	hash := make([]bool, hashSize*hashSize)
+	for y := 0; y < hashSize; y++ {
+		for x := 0; x < hashSize; x++ {
+			hash[y*hashSize+x] = float64(grayResized.Pix[y*grayResized.Stride+x]) > avg
+		}
 	}
 
 	return &ImageHash{
@@ -156,20 +160,18 @@ func DifferenceHash(img image.Image, hashSize int) *ImageHash {
 	gray := ToGrayscale(img)
 
 	// 2. Resize to (hashSize + 1) x hashSize
-	// Note: image.Rect is (minX, minY, maxX, maxY)
-	// Python: image = image.convert('L').resize((hash_size + 1, hash_size), ANTIALIAS)
-	resized := image.NewGray(image.Rect(0, 0, hashSize+1, hashSize))
-	draw.CatmullRom.Scale(resized, resized.Bounds(), gray, gray.Bounds(), draw.Over, nil)
+	resized := imaging.Resize(gray, hashSize+1, hashSize, imaging.Lanczos)
+	grayResized := ToGrayscale(resized)
 
 	// 3. Compute differences between columns
-	pixels := resized.Pix
-	// resized has hashSize+1 columns and hashSize rows
+	pixels := grayResized.Pix
+	// grayResized has hashSize+1 columns and hashSize rows
 	hash := make([]bool, hashSize*hashSize)
 	for y := 0; y < hashSize; y++ {
 		for x := 0; x < hashSize; x++ {
 			// p[x, y] vs p[x+1, y]
-			left := pixels[y*resized.Stride+x]
-			right := pixels[y*resized.Stride+x+1]
+			left := pixels[y*grayResized.Stride+x]
+			right := pixels[y*grayResized.Stride+x+1]
 			hash[y*hashSize+x] = right > left
 		}
 	}
@@ -191,17 +193,17 @@ func DifferenceHashVertical(img image.Image, hashSize int) *ImageHash {
 	gray := ToGrayscale(img)
 
 	// 2. Resize to hashSize x (hashSize + 1)
-	resized := image.NewGray(image.Rect(0, 0, hashSize, hashSize+1))
-	draw.CatmullRom.Scale(resized, resized.Bounds(), gray, gray.Bounds(), draw.Over, nil)
+	resized := imaging.Resize(gray, hashSize, hashSize+1, imaging.Lanczos)
+	grayResized := ToGrayscale(resized)
 
 	// 3. Compute differences between rows
-	pixels := resized.Pix
+	pixels := grayResized.Pix
 	hash := make([]bool, hashSize*hashSize)
 	for y := 0; y < hashSize; y++ {
 		for x := 0; x < hashSize; x++ {
 			// p[x, y] vs p[x, y+1]
-			top := pixels[y*resized.Stride+x]
-			bottom := pixels[(y+1)*resized.Stride+x]
+			top := pixels[y*grayResized.Stride+x]
+			bottom := pixels[(y+1)*grayResized.Stride+x]
 			hash[y*hashSize+x] = bottom > top
 		}
 	}
@@ -228,16 +230,16 @@ func PerceptualHash(img image.Image, hashSize int, highfreqFactor int) *ImageHas
 	gray := ToGrayscale(img)
 
 	// 2. Resize to imgSize x imgSize
-	resized := image.NewGray(image.Rect(0, 0, imgSize, imgSize))
-	draw.CatmullRom.Scale(resized, resized.Bounds(), gray, gray.Bounds(), draw.Over, nil)
+	resized := imaging.Resize(gray, imgSize, imgSize, imaging.Lanczos)
+	grayResized := ToGrayscale(resized)
 
 	// 3. Compute 2D DCT
-	pixels := resized.Pix
+	pixels := grayResized.Pix
 	matrix := make([][]float64, imgSize)
 	for y := 0; y < imgSize; y++ {
 		matrix[y] = make([]float64, imgSize)
 		for x := 0; x < imgSize; x++ {
-			matrix[y][x] = float64(pixels[y*resized.Stride+x])
+			matrix[y][x] = float64(pixels[y*grayResized.Stride+x])
 		}
 	}
 

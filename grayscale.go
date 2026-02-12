@@ -18,11 +18,16 @@ func ToGrayscale(img image.Image) *image.Gray {
 
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, _ := img.At(x, y).RGBA()
-			// RGBA returns values in [0, 65535].
-			// We need to convert them to [0, 255] before applying the formula,
-			// or scale the formula.
-			// pillow L formula works on [0, 255] range.
+			r, g, b, a := img.At(x, y).RGBA()
+			// RGBA returns values in [0, 65535] and they are alpha-premultiplied.
+			// Pillow's 'L' conversion ignores alpha, so we should un-premultiply
+			// to get the raw RGB values.
+
+			if a > 0 && a < 0xffff {
+				r = (r * 0xffff) / a
+				g = (g * 0xffff) / a
+				b = (b * 0xffff) / a
+			}
 
 			// Convert 16-bit to 8-bit
 			r8 := uint32(r >> 8)
@@ -30,8 +35,8 @@ func ToGrayscale(img image.Image) *image.Gray {
 			b8 := uint32(b >> 8)
 
 			// Applying the formula: R*0.299 + G*0.587 + B*0.114
-			// To avoid floating point, we can use: (R*299 + G*587 + B*114) / 1000
-			l := (r8*299 + g8*587 + b8*114) / 1000
+			// To avoid floating point, we can use: (R*299 + G*587 + B*114 + 500) / 1000
+			l := (r8*299 + g8*587 + b8*114 + 500) / 1000
 			grayImg.SetGray(x, y, color.Gray{Y: uint8(l)})
 		}
 	}
