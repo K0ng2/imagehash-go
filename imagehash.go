@@ -5,6 +5,7 @@ import (
 	"image"
 	"math"
 	"sort"
+	"sync"
 
 	"github.com/disintegration/imaging"
 )
@@ -119,13 +120,13 @@ func AverageHash(img image.Image, hashSize int) *ImageHash {
 		hashSize = 8
 	}
 
-	// 1. Convert to grayscale
-	gray := ToGrayscale(img)
+	// 1. Convert to grayscale using fast path
+	gray := ToGrayscaleFast(img)
 
 	// 2. Resize to hashSize x hashSize
 	resized := imaging.Resize(gray, hashSize, hashSize, imaging.Lanczos)
 	// imaging.Resize returns *image.NRGBA, convert to grayscale pixels
-	grayResized := ToGrayscale(resized)
+	grayResized := ToGrayscaleFast(resized)
 
 	// 3. Compute average pixel value
 	var sum uint64
@@ -157,12 +158,12 @@ func DifferenceHash(img image.Image, hashSize int) *ImageHash {
 		hashSize = 8
 	}
 
-	// 1. Convert to grayscale
-	gray := ToGrayscale(img)
+	// 1. Convert to grayscale using fast path
+	gray := ToGrayscaleFast(img)
 
 	// 2. Resize to (hashSize + 1) x hashSize
 	resized := imaging.Resize(gray, hashSize+1, hashSize, imaging.Lanczos)
-	grayResized := ToGrayscale(resized)
+	grayResized := ToGrayscaleFast(resized)
 
 	// 3. Compute differences between columns
 	pixels := grayResized.Pix
@@ -190,12 +191,12 @@ func DifferenceHashVertical(img image.Image, hashSize int) *ImageHash {
 		hashSize = 8
 	}
 
-	// 1. Convert to grayscale
-	gray := ToGrayscale(img)
+	// 1. Convert to grayscale using fast path
+	gray := ToGrayscaleFast(img)
 
 	// 2. Resize to hashSize x (hashSize + 1)
 	resized := imaging.Resize(gray, hashSize, hashSize+1, imaging.Lanczos)
-	grayResized := ToGrayscale(resized)
+	grayResized := ToGrayscaleFast(resized)
 
 	// 3. Compute differences between rows
 	pixels := grayResized.Pix
@@ -216,6 +217,22 @@ func DifferenceHashVertical(img image.Image, hashSize int) *ImageHash {
 	}
 }
 
+// Memory pools for pixel buffers
+var (
+	pixelPool32 = sync.Pool{
+		New: func() any {
+			p := make([]float64, 32*32)
+			return &p
+		},
+	}
+	pixelPool64 = sync.Pool{
+		New: func() any {
+			p := make([]float64, 64*64)
+			return &p
+		},
+	}
+)
+
 // PerceptualHash computes the Perceptual Hash of an image
 func PerceptualHash(img image.Image, hashSize int, highfreqFactor int) *ImageHash {
 	if hashSize < 2 {
@@ -227,12 +244,20 @@ func PerceptualHash(img image.Image, hashSize int, highfreqFactor int) *ImageHas
 
 	imgSize := hashSize * highfreqFactor
 
-	// 1. Convert to grayscale
-	gray := ToGrayscale(img)
+	// Use optimized fast DCT for common sizes
+	if imgSize == 32 && hashSize == 8 {
+		return perceptualHashFast32(img)
+	} else if imgSize == 64 && hashSize == 8 {
+		return perceptualHashFast64(img)
+	}
+
+	// Fallback to general implementation for other sizes
+	// 1. Convert to grayscale using fast path
+	gray := ToGrayscaleFast(img)
 
 	// 2. Resize to imgSize x imgSize
 	resized := imaging.Resize(gray, imgSize, imgSize, imaging.Lanczos)
-	grayResized := ToGrayscale(resized)
+	grayResized := ToGrayscaleFast(resized)
 
 	// 3. Compute 2D DCT
 	pixels := grayResized.Pix
@@ -271,6 +296,90 @@ func PerceptualHash(img image.Image, hashSize int, highfreqFactor int) *ImageHas
 	}
 }
 
+// perceptualHashFast64 uses optimized DCT for 64x64 -> 8x8 hash (default params)
+func perceptualHashFast64(img image.Image) *ImageHash {
+	// 1. Convert to grayscale using fast path
+	gray := ToGrayscaleFast(img)
+
+	// 2. Resize to 64x64
+	resized := imaging.Resize(gray, 64, 64, imaging.Lanczos)
+	grayResized := ToGrayscaleFast(resized)
+
+	// 3. Get pixel buffer from pool
+	pixelsPtr := pixelPool64.Get().(*[]float64)
+	defer pixelPool64.Put(pixelsPtr)
+	pixels := *pixelsPtr
+
+	// 4. Copy image data to buffer
+	pix := grayResized.Pix
+	for i := range 64 {
+		rowStride := i * grayResized.Stride
+		for j := range 64 {
+			pixels[i*64+j] = float64(pix[rowStride+j])
+		}
+	}
+
+	// 5. Compute fast DCT (returns 8x8 low freq coefficients)
+	dctLowFreq := DCT2DFast64(pixelsPtr)
+
+	// 6. Compute median
+	med := medianFast64(dctLowFreq[:])
+
+	// 7. Create hash
+	hash := make([]bool, 64)
+	for i, val := range dctLowFreq {
+		hash[i] = val > med
+	}
+
+	return &ImageHash{
+		hash: hash,
+		rows: 8,
+		cols: 8,
+	}
+}
+
+// perceptualHashFast32 uses optimized DCT for 32x32 -> 8x8 hash
+func perceptualHashFast32(img image.Image) *ImageHash {
+	// 1. Convert to grayscale using fast path
+	gray := ToGrayscaleFast(img)
+
+	// 2. Resize to 32x32
+	resized := imaging.Resize(gray, 32, 32, imaging.Lanczos)
+	grayResized := ToGrayscaleFast(resized)
+
+	// 3. Get pixel buffer from pool
+	pixelsPtr := pixelPool32.Get().(*[]float64)
+	defer pixelPool32.Put(pixelsPtr)
+	pixels := *pixelsPtr
+
+	// 4. Copy image data to buffer
+	pix := grayResized.Pix
+	for i := range 32 {
+		rowStride := i * grayResized.Stride
+		for j := range 32 {
+			pixels[i*32+j] = float64(pix[rowStride+j])
+		}
+	}
+
+	// 5. Compute fast DCT (returns 8x8 low freq coefficients)
+	dctLowFreq := DCT2DFast32(pixelsPtr, 8)
+
+	// 6. Compute median
+	med := median(dctLowFreq)
+
+	// 7. Create hash
+	hash := make([]bool, 64)
+	for i, val := range dctLowFreq {
+		hash[i] = val > med
+	}
+
+	return &ImageHash{
+		hash: hash,
+		rows: 8,
+		cols: 8,
+	}
+}
+
 func median(data []float64) float64 {
 	length := len(data)
 	if length == 0 {
@@ -287,4 +396,20 @@ func median(data []float64) float64 {
 		return (sorted[length/2-1] + sorted[length/2]) / 2
 	}
 	return sorted[length/2]
+}
+
+// medianFast64 is optimized for fixed-size 64-element array
+func medianFast64(data []float64) float64 {
+	if len(data) != 64 {
+		return median(data)
+	}
+
+	// Make a copy to avoid modifying original data
+	var sorted [64]float64
+	copy(sorted[:], data)
+
+	sort.Float64s(sorted[:])
+
+	// For even length (64), return average of middle two elements
+	return (sorted[31] + sorted[32]) / 2
 }
